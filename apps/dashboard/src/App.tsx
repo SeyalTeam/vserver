@@ -177,7 +177,8 @@ type GitHubReposResponse = {
   error?: string;
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
+const configuredApiBase = (import.meta.env.VITE_API_BASE ?? "").trim();
+const API_BASE = configuredApiBase || (import.meta.env.DEV ? "http://localhost:3000" : "/api");
 const OAUTH_GITHUB_START_URL = `${API_BASE}/v1/oauth/github/start`;
 const OAUTH_GITLAB_START_URL = `${API_BASE}/v1/oauth/gitlab/start`;
 const OAUTH_BITBUCKET_START_URL = `${API_BASE}/v1/oauth/bitbucket/start`;
