@@ -207,6 +207,11 @@ const localServerHost = process.env.CONTROL_PLANE_SERVER_HOST ?? os.hostname();
 const controlPlanePublicUrl =
   process.env.CONTROL_PLANE_PUBLIC_URL ?? `http://${hostFromEnv(process.env.CONTROL_PLANE_HOST)}:${Number(process.env.CONTROL_PLANE_PORT ?? 3000)}`;
 const dashboardPublicUrl = process.env.DASHBOARD_PUBLIC_URL ?? "http://localhost:5173";
+const controlPlanePublicHost = hostFromMaybeUrl(controlPlanePublicUrl);
+const dashboardPublicHost = hostFromMaybeUrl(dashboardPublicUrl);
+const dashboardKnownHosts = new Set(
+  [normalizeHost(localServerHost), controlPlanePublicHost, dashboardPublicHost].filter((value) => value.length > 0),
+);
 const screenshotCacheDir =
   process.env.SCREENSHOT_CACHE_DIR ?? path.resolve(currentDir, "../../../.local/screenshots");
 const defaultScreenshotTargetUrl = (process.env.KANI_TAXI_PREVIEW_URL ?? "https://kanitaxi.com").trim();
@@ -262,7 +267,7 @@ const oauthAccessTokens = new Map<string, OAuthAccessToken>();
 
 const mapAuthor = (author: string): string => {
   if (author.toLowerCase().includes("hello-cms-ai")) {
-    return "SeyalTeam";
+    return "vserver";
   }
   return author;
 };
@@ -319,6 +324,16 @@ function hostFromEnv(hostInput: string | undefined): string {
     return "localhost";
   }
   return value;
+}
+
+function hostFromMaybeUrl(rawValue: string): string {
+  const value = rawValue.trim();
+  if (!value) return "";
+  try {
+    return normalizeHost(new URL(value).hostname);
+  } catch {
+    return normalizeHost(value);
+  }
 }
 
 function parseReturnTo(rawReturnTo: string | undefined): string {
@@ -811,6 +826,28 @@ function extractHostFromQuotedFields(quotedFields: string[]): string {
   return "";
 }
 
+function isControlPlaneRequestPath(pathValue: string): boolean {
+  const normalizedPath = pathValue.trim().toLowerCase().split("?")[0] ?? "";
+  if (!normalizedPath) return false;
+  const match = normalizedPath.match(/^\/(?:api\/)?v1\/([^/]+)/);
+  if (!match) {
+    return normalizedPath === "/v1" || normalizedPath === "/api/v1";
+  }
+  const root = match[1] ?? "";
+  return root === "projects" || root === "logs" || root === "webhooks" || root === "deployments" || root === "oauth";
+}
+
+function isDashboardUsageRequest(host: string, pathValue: string): boolean {
+  const normalizedHost = normalizeHost(host);
+  if (isControlPlaneRequestPath(pathValue)) {
+    return true;
+  }
+  if (normalizedHost && dashboardKnownHosts.has(normalizedHost)) {
+    return true;
+  }
+  return false;
+}
+
 function parseNginxTimestamp(rawValue: string): string | undefined {
   const normalized = rawValue.trim().replace(/^(\d{1,2}\/[A-Za-z]{3}\/\d{4}):/, "$1 ");
   const parsed = Date.parse(normalized);
@@ -1069,6 +1106,11 @@ function parseRequestLogEntries(
     if (!parsedLine) {
       continue;
     }
+    const normalizedParsedHost = normalizeHost(parsedLine.host);
+    const normalizedParsedPath = parsedLine.path.trim() || "/";
+    if (isDashboardUsageRequest(normalizedParsedHost, normalizedParsedPath)) {
+      continue;
+    }
 
     const inferredProjectSlug = resolveProjectSlugFromRequestLog(parsedLine);
     if (!inferredProjectSlug) {
@@ -1081,9 +1123,9 @@ function parseRequestLogEntries(
 
     const timestamp = parsedLine.timestamp ?? new Date().toISOString();
     const method = parsedLine.method.trim().toUpperCase() || "GET";
-    const pathValue = parsedLine.path.trim() || "/";
+    const pathValue = normalizedParsedPath;
     const host =
-      normalizeHost(parsedLine.host) ||
+      normalizedParsedHost ||
       resolveProjectPreviewHost(resolvedProjectSlug) ||
       localServerHost;
     const message = parsedLine.message.trim() || `${method} ${pathValue}`;
@@ -1381,7 +1423,7 @@ app.get("/health", async () => {
 app.get("/v1", async () => {
   return {
     status: "ok",
-    message: "RunCloud clone control-plane starter",
+    message: "vserver control-plane starter",
   };
 });
 

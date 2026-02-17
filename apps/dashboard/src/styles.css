@@ -56,6 +56,20 @@ body {
   padding: 0 6px;
 }
 
+.sidebar-header-home {
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-header-home:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
 .sidebar-header-project {
   gap: 10px;
 }
@@ -248,9 +262,9 @@ kbd {
 
 .logs-sidebar-top h3 {
   margin: 0;
-  font-size: 1.85rem;
+  font-size: 1.05rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .logs-sidebar-back-btn {

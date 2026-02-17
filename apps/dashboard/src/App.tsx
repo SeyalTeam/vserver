@@ -249,8 +249,8 @@ const initialProjects: ProjectRecord[] = [
     frameworkBadge: "N",
     primaryDomain: "kanitaxi.com",
     additionalDomains: ["www.kanitaxi.com"],
-    deploymentUrl: "call-taxi-gkb83grp1-seyal.vercel.app",
-    repository: "SeyalTeam/CallTAXI",
+    deploymentUrl: "call-taxi-gkb83grp1-vserver.vercel.app",
+    repository: "vserver/call-taxi",
     commitMessage: "hero section background issues sorted",
     commitHash: "180ea65",
     updatedAt: "1d ago",
@@ -259,7 +259,7 @@ const initialProjects: ProjectRecord[] = [
     statusTone: "healthy",
     deploymentStatus: "Ready",
     deploymentAge: "1d ago",
-    author: "SeyalTeam",
+    author: "vserver",
     previewImage: "/project-preview.png",
   },
 ];
@@ -1775,6 +1775,21 @@ export default function App() {
     setSelectedLogId(null);
   };
 
+  const goToProjectsHome = () => {
+    setActiveMenu("Projects");
+    setProjectPanel("overview");
+    setSelectedProjectId(null);
+    setActiveProjectMenu("Overview");
+    setAddMenuOpen(false);
+    setGitAccountMenuOpen(false);
+    setLogsMenuOpen(false);
+    setLogsSidebarOpen(false);
+    setTimelinePresetMenuOpen(false);
+    setTimelineCalendarOpen(false);
+    setSelectedLogId(null);
+    setProjectConnectError(null);
+  };
+
   const applyCustomTimeline = () => {
     const start = parseLocalDateTime(customStartDate, customStartTime);
     const end = parseLocalDateTime(customEndDate, customEndTime);
@@ -1834,16 +1849,20 @@ export default function App() {
       }`}
     >
       <aside className={`sidebar ${isProjectDetail ? "sidebar-project-detail" : ""}`}>
-        <div className={`sidebar-header ${isProjectDetail ? "sidebar-header-project" : ""}`}>
-          <div className="workspace-mark">S</div>
+        <button
+          type="button"
+          className={`sidebar-header sidebar-header-home ${isProjectDetail ? "sidebar-header-project" : ""}`}
+          onClick={goToProjectsHome}
+          aria-label="Go to all projects"
+        >
+          <div className="workspace-mark">V</div>
           <div>
-            <p className="workspace-label">{isProjectDetail ? "Seyal" : "Workspace"}</p>
+            <p className="workspace-label">{isProjectDetail ? "Project" : "Workspace"}</p>
             <div className="workspace-title-row">
-              <h1>Seyal</h1>
-              {isProjectDetail && <span className="workspace-pill-warning">Overdue</span>}
+              <h1>vserver</h1>
             </div>
           </div>
-        </div>
+        </button>
 
         <div className="sidebar-search">
           <div className="sidebar-search-text">
