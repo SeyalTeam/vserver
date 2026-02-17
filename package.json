@@ -1,0 +1,16 @@
+{
+  "name": "runcloud-clone",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w apps/control-plane",
+    "dev:web": "npm run dev -w apps/dashboard",
+    "build": "npm run build -ws",
+    "setup:mongo-rs": "bash scripts/setup-local-mongo-replica.sh",
+    "tracker:install": "bash scripts/install-server-tracker.sh",
+    "tracker:record": "bash scripts/deploy-tracker.sh"
+  }
+}
