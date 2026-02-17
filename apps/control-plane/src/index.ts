@@ -800,7 +800,11 @@ function extractHostFromQuotedFields(quotedFields: string[]): string {
     if (!value || value === "-") continue;
     if (value.includes(" ")) continue;
     const normalized = normalizeHost(value);
-    if (normalized) {
+    const looksLikeHost =
+      normalized === "localhost" ||
+      /^\d{1,3}(\.\d{1,3}){3}$/.test(normalized) ||
+      normalized.includes(".");
+    if (normalized && looksLikeHost) {
       return normalized;
     }
   }
@@ -1066,13 +1070,14 @@ function parseRequestLogEntries(
       continue;
     }
 
-    const resolvedProjectSlug = normalizedRequestedProject ?? resolveProjectSlugFromRequestLog(parsedLine);
-    if (!resolvedProjectSlug) {
+    const inferredProjectSlug = resolveProjectSlugFromRequestLog(parsedLine);
+    if (!inferredProjectSlug) {
       continue;
     }
-    if (normalizedRequestedProject && resolvedProjectSlug !== normalizedRequestedProject) {
+    if (normalizedRequestedProject && inferredProjectSlug !== normalizedRequestedProject) {
       continue;
     }
+    const resolvedProjectSlug = inferredProjectSlug;
 
     const timestamp = parsedLine.timestamp ?? new Date().toISOString();
     const method = parsedLine.method.trim().toUpperCase() || "GET";
