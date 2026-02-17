@@ -1113,19 +1113,27 @@ function parseRequestLogEntries(
     }
 
     const inferredProjectSlug = resolveProjectSlugFromRequestLog(parsedLine);
-    if (!inferredProjectSlug) {
+    let resolvedProjectSlug = inferredProjectSlug;
+    if (normalizedRequestedProject) {
+      if (inferredProjectSlug && inferredProjectSlug !== normalizedRequestedProject) {
+        continue;
+      }
+      // Direct hits like /oktry can be missing referer/host in nginx combined logs.
+      // In project-scoped mode, include unresolved non-control-plane entries under that project.
+      if (!inferredProjectSlug) {
+        resolvedProjectSlug = normalizedRequestedProject;
+      }
+    }
+    if (!resolvedProjectSlug) {
       continue;
     }
-    if (normalizedRequestedProject && inferredProjectSlug !== normalizedRequestedProject) {
-      continue;
-    }
-    const resolvedProjectSlug = inferredProjectSlug;
 
     const timestamp = parsedLine.timestamp ?? new Date().toISOString();
     const method = parsedLine.method.trim().toUpperCase() || "GET";
     const pathValue = normalizedParsedPath;
     const host =
       normalizedParsedHost ||
+      resolveProjectConfiguredHosts(resolvedProjectSlug)[0] ||
       resolveProjectPreviewHost(resolvedProjectSlug) ||
       localServerHost;
     const message = parsedLine.message.trim() || `${method} ${pathValue}`;
