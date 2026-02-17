@@ -177,6 +177,7 @@ type AutoDeployProjectConfig = {
   deployCommand: string;
   environment: string;
   remoteHost?: string;
+  domains?: string[];
 };
 
 type AutoDeployContext = {
@@ -416,6 +417,14 @@ function asNonEmptyString(value: unknown): string {
   return value.trim();
 }
 
+function asDomainList(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .flatMap((entry) => (typeof entry === "string" ? entry.split(",") : []))
+    .map((entry) => normalizeHost(entry))
+    .filter((entry) => entry.length > 0);
+}
+
 function parseAutoDeployProjects(
   rawProjects: string | undefined,
   defaultRemoteHost: string,
@@ -453,6 +462,13 @@ function parseAutoDeployProjects(
     const deployCommandValue = asNonEmptyString(record.deployCommand);
     const environmentValue = asNonEmptyString(record.environment) || "Production";
     const remoteHostValue = asNonEmptyString(record.remoteHost) || defaultRemoteHost;
+    const domainValues = [
+      ...asDomainList(record.domains),
+      ...asDomainList(record.domain),
+      ...asDomainList(record.liveDomains),
+      ...asDomainList(record.liveDomain),
+      ...asDomainList(record.primaryDomain),
+    ];
 
     if (!projectNameValue || !repositoryValue || !repoPathValue || !deployCommandValue) {
       app.log.warn(
@@ -483,6 +499,7 @@ function parseAutoDeployProjects(
       deployCommand: deployCommandValue,
       environment: environmentValue,
       remoteHost: remoteHostValue || undefined,
+      domains: [...new Set(domainValues)],
     });
   }
 
@@ -757,6 +774,39 @@ function resolveProjectPreviewHost(projectSlug: string): string {
   }
 }
 
+function resolveProjectConfiguredHosts(projectSlug: string): string[] {
+  const project = autoDeployProjectsBySlug.get(projectSlug);
+  const envPrefix = projectSlug.replace(/-/g, "_").toUpperCase();
+  const envDomains = [
+    ...asDomainList(process.env[`${envPrefix}_DOMAINS`]),
+    ...asDomainList(process.env[`${envPrefix}_DOMAIN`]),
+    ...asDomainList(process.env[`${envPrefix}_LIVE_DOMAINS`]),
+    ...asDomainList(process.env[`${envPrefix}_LIVE_DOMAIN`]),
+  ];
+  const hosts = [
+    ...(project?.domains ?? []),
+    ...envDomains,
+  ].map((entry) => normalizeHost(entry));
+  return [...new Set(hosts.filter((entry) => entry.length > 0))];
+}
+
+function projectSlugCanonicalValue(projectSlug: string): string {
+  return projectSlug.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function extractHostFromQuotedFields(quotedFields: string[]): string {
+  for (const field of quotedFields) {
+    const value = (field ?? "").trim();
+    if (!value || value === "-") continue;
+    if (value.includes(" ")) continue;
+    const normalized = normalizeHost(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
 function parseNginxTimestamp(rawValue: string): string | undefined {
   const normalized = rawValue.trim().replace(/^(\d{1,2}\/[A-Za-z]{3}\/\d{4}):/, "$1 ");
   const parsed = Date.parse(normalized);
@@ -912,7 +962,7 @@ function parseNginxRequestLogLine(line: string): ParsedRequestLogLine | null {
   const statusCode = coerceStatusCode(match.groups.status);
   const rest = match.groups.rest ?? "";
   const quotedFields = [...rest.matchAll(/"([^"]*)"/g)].map((item) => item[1] ?? "");
-  const hostCandidate = quotedFields.length >= 3 ? quotedFields[2] : "";
+  const hostCandidate = extractHostFromQuotedFields(quotedFields);
 
   return {
     timestamp: parseNginxTimestamp(match.groups.time ?? ""),
@@ -942,9 +992,21 @@ function resolveProjectSlugFromRequestLog(entry: ParsedRequestLogLine): string {
 
   const normalizedHost = normalizeHost(entry.host);
   if (normalizedHost) {
+    const hostLabels = normalizedHost
+      .split(".")
+      .map((label) => label.toLowerCase().replace(/[^a-z0-9]/g, ""))
+      .filter((label) => label.length > 0);
     for (const project of autoDeployProjects) {
       const previewHost = resolveProjectPreviewHost(project.projectSlug);
       if (previewHost && previewHost === normalizedHost) {
+        return project.projectSlug;
+      }
+      const configuredHosts = resolveProjectConfiguredHosts(project.projectSlug);
+      if (configuredHosts.includes(normalizedHost)) {
+        return project.projectSlug;
+      }
+      const slugCanonical = projectSlugCanonicalValue(project.projectSlug);
+      if (slugCanonical && hostLabels.some((label) => label === slugCanonical)) {
         return project.projectSlug;
       }
     }
@@ -956,9 +1018,14 @@ function resolveProjectSlugFromRequestLog(entry: ParsedRequestLogLine): string {
     }
   }
 
-  const haystack = `${entry.path} ${entry.message}`.toLowerCase();
+  const haystack = `${entry.path} ${entry.message} ${normalizedHost}`.toLowerCase();
+  const canonicalHaystack = haystack.replace(/[^a-z0-9]/g, "");
   for (const project of autoDeployProjects) {
-    if (haystack.includes(project.projectSlug)) {
+    const slugCanonical = projectSlugCanonicalValue(project.projectSlug);
+    if (
+      haystack.includes(project.projectSlug) ||
+      (slugCanonical && canonicalHaystack.includes(slugCanonical))
+    ) {
       return project.projectSlug;
     }
   }

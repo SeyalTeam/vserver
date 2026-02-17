@@ -793,6 +793,15 @@ function RightChevronIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M5 5L15 15" />
+      <path d="M15 5L5 15" />
+    </svg>
+  );
+}
+
 function normalizeFetchError(error: unknown): string {
   if (error instanceof TypeError) {
     return `Cannot reach API at ${API_BASE}. Start control-plane with npm run dev:api`;
@@ -914,6 +923,42 @@ function formatLogTimestamp(isoTime: string | undefined): string {
     second: "2-digit",
     hour12: false,
   }).format(target);
+}
+
+function formatLogDetailTimestamp(isoTime: string | undefined): string {
+  if (!isoTime) return "-";
+  const target = new Date(isoTime);
+  if (Number.isNaN(target.getTime())) return "-";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).format(target);
+}
+
+function parseLogPathDetails(pathValue: string | undefined): { pathname: string; searchParams: Array<[string, string]> } {
+  const normalized = pathValue && pathValue.trim().length > 0 ? pathValue.trim() : "/";
+  const candidate =
+    normalized.startsWith("http://") || normalized.startsWith("https://")
+      ? normalized
+      : `https://request.local${normalized.startsWith("/") ? normalized : `/${normalized}`}`;
+  try {
+    const parsed = new URL(candidate);
+    return {
+      pathname: parsed.pathname || "/",
+      searchParams: [...parsed.searchParams.entries()],
+    };
+  } catch {
+    return {
+      pathname: normalized,
+      searchParams: [],
+    };
+  }
 }
 
 function toLogStatusTone(statusCode: number | null): "ok" | "error" | "neutral" {
@@ -1061,6 +1106,7 @@ export default function App() {
   const [logsSidebarOpen, setLogsSidebarOpen] = useState(false);
   const [logsRefreshTick, setLogsRefreshTick] = useState(0);
   const [logsLiveEnabled, setLogsLiveEnabled] = useState(false);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [timelineFilterMode, setTimelineFilterMode] = useState<TimelineFilterMode>("last-30-minutes");
   const [timelinePresetMenuOpen, setTimelinePresetMenuOpen] = useState(false);
   const [timelineCalendarOpen, setTimelineCalendarOpen] = useState(false);
@@ -1195,6 +1241,14 @@ export default function App() {
       return haystack.includes(search);
     });
   }, [logSeverityFilters, requestLogs, logSearch]);
+  const selectedLogEntry = useMemo(() => {
+    if (!selectedLogId) return null;
+    return filteredLogs.find((logEntry) => logEntry.logId === selectedLogId) ?? null;
+  }, [filteredLogs, selectedLogId]);
+  const selectedLogPathDetails = useMemo(
+    () => parseLogPathDetails(selectedLogEntry?.path),
+    [selectedLogEntry?.path]
+  );
 
   useEffect(() => {
     setPreviewFallback(false);
@@ -1509,8 +1563,15 @@ export default function App() {
       setLogsSidebarOpen(false);
       setTimelinePresetMenuOpen(false);
       setTimelineCalendarOpen(false);
+      setSelectedLogId(null);
     }
   }, [isLogsView]);
+
+  useEffect(() => {
+    if (!selectedLogId) return;
+    if (filteredLogs.some((entry) => entry.logId === selectedLogId)) return;
+    setSelectedLogId(null);
+  }, [filteredLogs, selectedLogId]);
 
   useEffect(() => {
     if (activeMenu !== "Projects") {
@@ -1700,6 +1761,7 @@ export default function App() {
     setActiveProjectMenu("Overview");
     setAddMenuOpen(false);
     setLogsSidebarOpen(false);
+    setSelectedLogId(null);
   };
 
   const closeProjectDetail = () => {
@@ -1710,6 +1772,7 @@ export default function App() {
     setLogsSidebarOpen(false);
     setTimelinePresetMenuOpen(false);
     setTimelineCalendarOpen(false);
+    setSelectedLogId(null);
   };
 
   const applyCustomTimeline = () => {
@@ -2327,46 +2390,133 @@ export default function App() {
               )}
 
               {!logsError && filteredLogs.length > 0 && (
-                <>
-                  <div className="log-header-row">
-                    <span>Time</span>
-                    <span>Status</span>
-                    <span>Host</span>
-                    <span>Request</span>
-                    <span>Messages</span>
+                <div className={`logs-workspace ${selectedLogEntry ? "has-detail" : ""}`}>
+                  <div className="logs-list-pane">
+                    <div className="log-header-row">
+                      <span>Time</span>
+                      <span>Status</span>
+                      <span>Host</span>
+                      <span>Request</span>
+                      <span>Messages</span>
+                    </div>
+
+                    {filteredLogs.map((logEntry) => {
+                      const isSelected = selectedLogId === logEntry.logId;
+                      const statusCodeLabel = logEntry.statusCode === null ? "---" : String(logEntry.statusCode);
+                      const statusTone = toLogStatusTone(logEntry.statusCode);
+                      const message =
+                        isProjectScopedLogs || !logEntry.projectName
+                          ? logEntry.message
+                          : `[${logEntry.projectName}] ${logEntry.message}`;
+                      const methodLabel = (logEntry.method || "GET").toUpperCase();
+                      const requestPath = logEntry.path || "/";
+                      const host = logEntry.host || "-";
+
+                      return (
+                        <article
+                          key={logEntry.logId}
+                          className={`log-row ${isSelected ? "selected" : ""}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedLogId(logEntry.logId)}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            setSelectedLogId(logEntry.logId);
+                          }}
+                        >
+                          <p className="log-time">{formatLogTimestamp(logEntry.timestamp)}</p>
+                          <p className="log-status">
+                            <span className={`log-status-pill ${statusTone}`}>{statusCodeLabel}</span>
+                          </p>
+                          <p className="log-host" title={host}>
+                            {host}
+                          </p>
+                          <p className="log-request" title={requestPath}>
+                            <span className="log-method">{methodLabel}</span>
+                            <span>{requestPath}</span>
+                          </p>
+                          <p className="log-message" title={message}>
+                            {message}
+                          </p>
+                        </article>
+                      );
+                    })}
                   </div>
 
-                  {filteredLogs.map((logEntry) => {
-                    const statusCodeLabel = logEntry.statusCode === null ? "---" : String(logEntry.statusCode);
-                    const statusTone = toLogStatusTone(logEntry.statusCode);
-                    const message =
-                      isProjectScopedLogs || !logEntry.projectName
-                        ? logEntry.message
-                        : `[${logEntry.projectName}] ${logEntry.message}`;
-                    const methodLabel = (logEntry.method || "GET").toUpperCase();
-                    const requestPath = logEntry.path || "/";
-                    const host = logEntry.host || "-";
+                  {selectedLogEntry && (
+                    <aside className="log-detail-pane">
+                      <div className="log-detail-head">
+                        <p className="log-detail-title">
+                          <span className="log-detail-method">{selectedLogEntry.method.toUpperCase()}</span>
+                          <span className="log-detail-path" title={selectedLogPathDetails.pathname}>
+                            {selectedLogPathDetails.pathname}
+                          </span>
+                        </p>
+                        <div className="log-detail-head-actions">
+                          <span className={`log-status-pill ${toLogStatusTone(selectedLogEntry.statusCode)}`}>
+                            {selectedLogEntry.statusCode === null ? "---" : String(selectedLogEntry.statusCode)}
+                          </span>
+                          <button
+                            type="button"
+                            className="log-detail-close"
+                            aria-label="Close log details"
+                            onClick={() => setSelectedLogId(null)}
+                          >
+                            <CloseIcon />
+                          </button>
+                        </div>
+                      </div>
 
-                    return (
-                      <article key={logEntry.logId} className="log-row">
-                        <p className="log-time">{formatLogTimestamp(logEntry.timestamp)}</p>
-                        <p className="log-status">
-                          <span className={`log-status-pill ${statusTone}`}>{statusCodeLabel}</span>
-                        </p>
-                        <p className="log-host" title={host}>
-                          {host}
-                        </p>
-                        <p className="log-request" title={requestPath}>
-                          <span className="log-method">{methodLabel}</span>
-                          <span>{requestPath}</span>
-                        </p>
-                        <p className="log-message" title={message}>
-                          {message}
-                        </p>
-                      </article>
-                    );
-                  })}
-                </>
+                      <p className="log-detail-subtitle">
+                        Request started {formatLogDetailTimestamp(selectedLogEntry.timestamp)}
+                      </p>
+
+                      <section className="log-detail-card">
+                        <div className="log-detail-row">
+                          <span>Request ID</span>
+                          <code title={selectedLogEntry.logId}>{selectedLogEntry.logId}</code>
+                        </div>
+                        <div className="log-detail-row">
+                          <span>Path</span>
+                          <code title={selectedLogEntry.path}>{selectedLogEntry.path || "/"}</code>
+                        </div>
+                        <div className="log-detail-row">
+                          <span>Host</span>
+                          <code title={selectedLogEntry.host}>{selectedLogEntry.host || "-"}</code>
+                        </div>
+                        <div className="log-detail-row">
+                          <span>Project</span>
+                          <code>{selectedLogEntry.projectName}</code>
+                        </div>
+                        <div className="log-detail-row">
+                          <span>Remote IP</span>
+                          <code>{selectedLogEntry.remoteAddr || "-"}</code>
+                        </div>
+                      </section>
+
+                      {selectedLogPathDetails.searchParams.length > 0 && (
+                        <section className="log-detail-card">
+                          <p className="log-detail-card-title">Search Params</p>
+                          <div className="log-detail-params">
+                            {selectedLogPathDetails.searchParams.map(([key, value], index) => (
+                              <div key={`${key}-${index}`} className="log-detail-row">
+                                <span>{key}</span>
+                                <code title={value}>{value || "(empty)"}</code>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      <section className="log-detail-card">
+                        <p className="log-detail-card-title">Message</p>
+                        <pre className="log-detail-message">{selectedLogEntry.message}</pre>
+                      </section>
+                    </aside>
+                  )}
+                </div>
               )}
             </section>
           </>

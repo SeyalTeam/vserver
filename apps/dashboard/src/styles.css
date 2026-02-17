@@ -2335,6 +2335,26 @@ h4 {
   padding: 12px;
 }
 
+.logs-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.logs-workspace.has-detail {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.logs-list-pane {
+  min-width: 0;
+  overflow: auto;
+}
+
+.logs-list-pane .log-header-row,
+.logs-list-pane .log-row {
+  min-width: 760px;
+}
+
 .log-header-row,
 .log-row {
   display: grid;
@@ -2356,6 +2376,16 @@ h4 {
 
 .log-row {
   border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.log-row:hover {
+  background: #f8fafc;
+}
+
+.log-row.selected {
+  background: #eef4ff;
 }
 
 .log-row:last-child {
@@ -2439,6 +2469,145 @@ h4 {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.log-detail-pane {
+  border-left: 1px solid var(--line);
+  background: #fdfdfd;
+  padding: 10px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.log-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.log-detail-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.log-detail-method {
+  min-height: 24px;
+  border-radius: 8px;
+  border: 1px solid #d9dde4;
+  background: #f5f7fa;
+  color: #3d4452;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.log-detail-path {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1d2431;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-detail-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.log-detail-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d8dce3;
+  border-radius: 9px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.log-detail-close svg {
+  width: 15px;
+  height: 15px;
+  stroke: #606876;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.log-detail-subtitle {
+  margin: 0;
+  color: #5f6775;
+  font-size: 0.78rem;
+}
+
+.log-detail-card {
+  border: 1px solid #d9dde5;
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.log-detail-card-title {
+  margin: 0;
+  color: #5f6775;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.log-detail-params {
+  display: grid;
+  gap: 5px;
+}
+
+.log-detail-row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.log-detail-row span {
+  color: #606978;
+  font-size: 0.78rem;
+}
+
+.log-detail-row code {
+  font-family: "IBM Plex Mono", "Menlo", monospace;
+  font-size: 0.77rem;
+  background: #f7f9fb;
+  border: 1px solid #e1e5ec;
+  border-radius: 8px;
+  padding: 4px 6px;
+  color: #222a36;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-detail-message {
+  margin: 0;
+  font-family: "IBM Plex Mono", "Menlo", monospace;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #2a3140;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .deployments-table {
@@ -2719,6 +2888,15 @@ h4 {
     grid-template-columns: 170px 120px 155px minmax(210px, 1fr) 145px 28px;
   }
 
+  .logs-workspace.has-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .log-detail-pane {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
   .log-header-row,
   .log-row {
     grid-template-columns: 150px 82px minmax(140px, 0.8fr) minmax(170px, 1fr) minmax(220px, 1.2fr);
@@ -2852,12 +3030,27 @@ h4 {
     gap: 6px;
   }
 
+  .logs-list-pane .log-header-row,
+  .logs-list-pane .log-row {
+    min-width: 0;
+  }
+
   .log-host,
   .log-request,
   .log-message {
     white-space: normal;
     overflow: visible;
     text-overflow: initial;
+    word-break: break-word;
+  }
+
+  .log-detail-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .log-detail-row code {
+    white-space: normal;
     word-break: break-word;
   }
 
