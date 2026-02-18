@@ -1117,7 +1117,7 @@ export default function App() {
   const [logsRefreshTick, setLogsRefreshTick] = useState(0);
   const [logsLiveEnabled, setLogsLiveEnabled] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
-  const [timelineFilterMode, setTimelineFilterMode] = useState<TimelineFilterMode>("last-30-minutes");
+  const [timelineFilterMode, setTimelineFilterMode] = useState<TimelineFilterMode>("last-day");
   const [timelinePresetMenuOpen, setTimelinePresetMenuOpen] = useState(false);
   const [timelineCalendarOpen, setTimelineCalendarOpen] = useState(false);
   const [timelineCalendarMonth, setTimelineCalendarMonth] = useState<Date>(() => {
@@ -1462,16 +1462,24 @@ export default function App() {
         }
 
         const targetProjectIds = configuredProjectIds.length > 0 ? configuredProjectIds : [deploymentsProjectId];
-        const responses = await Promise.allSettled(
-          targetProjectIds.map(async (projectId) => {
+        const responses = await Promise.allSettled([
+          (async () => {
+            const response = await fetch(`${API_BASE}/v1/logs?${buildLogsParams().toString()}`);
+            const payload = (await response.json()) as RequestLogsResponse;
+            if (!response.ok) {
+              throw new Error(payload.error ?? "Failed to load request logs");
+            }
+            return payload.data ?? [];
+          })(),
+          ...targetProjectIds.map(async (projectId) => {
             const response = await fetch(`${API_BASE}/v1/logs?${buildLogsParams(projectId).toString()}`);
             const payload = (await response.json()) as RequestLogsResponse;
             if (!response.ok) {
               throw new Error(payload.error ?? `Failed to load request logs for ${projectId}`);
             }
             return payload.data ?? [];
-          })
-        );
+          }),
+        ]);
         if (cancelled) return;
 
         const successful = responses.filter(
