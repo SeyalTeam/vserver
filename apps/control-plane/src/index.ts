@@ -1118,9 +1118,9 @@ function parseRequestLogEntries(
       if (inferredProjectSlug && inferredProjectSlug !== normalizedRequestedProject) {
         continue;
       }
-      // Direct hits like /oktry can be missing referer/host in nginx combined logs.
-      // In project-scoped mode, include unresolved non-control-plane entries under that project.
-      if (!inferredProjectSlug) {
+      // Keep legacy single-project behavior for unresolved entries.
+      // In multi-project setups, unresolved entries must be skipped to avoid cross-project leakage.
+      if (!inferredProjectSlug && autoDeployProjects.length <= 1) {
         resolvedProjectSlug = normalizedRequestedProject;
       }
     }
