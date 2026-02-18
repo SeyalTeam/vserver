@@ -386,6 +386,15 @@ function sortDeploymentsByNewest(deployments: Deployment[]): Deployment[] {
   return [...deployments].sort((left, right) => deploymentTimestamp(right) - deploymentTimestamp(left));
 }
 
+function requestLogTimestamp(logEntry: RequestLogEntry): number {
+  const parsed = Date.parse(logEntry.timestamp);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function sortRequestLogsByNewest(logs: RequestLogEntry[]): RequestLogEntry[] {
+  return [...logs].sort((left, right) => requestLogTimestamp(right) - requestLogTimestamp(left));
+}
+
 const templateCards = [
   {
     id: "nextjs",
@@ -1421,31 +1430,71 @@ export default function App() {
 
     let cancelled = false;
     const logLimit = isProjectScopedLogs ? 80 : 180;
+    const buildLogsParams = (projectId?: string): URLSearchParams => {
+      const params = new URLSearchParams();
+      params.set("limit", String(logLimit));
+      if (projectId) {
+        params.set("project", projectId);
+      }
+      if (timelineWindow.startIso) {
+        params.set("start", timelineWindow.startIso);
+      }
+      if (timelineWindow.endIso) {
+        params.set("end", timelineWindow.endIso);
+      }
+      return params;
+    };
 
     const loadRequestLogs = async () => {
       setLogsLoading(true);
       setLogsError(null);
 
       try {
-        const params = new URLSearchParams();
-        params.set("limit", String(logLimit));
         if (isProjectScopedLogs) {
-          params.set("project", deploymentsProjectId);
-        }
-        if (timelineWindow.startIso) {
-          params.set("start", timelineWindow.startIso);
-        }
-        if (timelineWindow.endIso) {
-          params.set("end", timelineWindow.endIso);
+          const response = await fetch(`${API_BASE}/v1/logs?${buildLogsParams(deploymentsProjectId).toString()}`);
+          const payload = (await response.json()) as RequestLogsResponse;
+          if (!response.ok) {
+            throw new Error(payload.error ?? "Failed to load request logs");
+          }
+          if (cancelled) return;
+          setRequestLogs(payload.data ?? []);
+          return;
         }
 
-        const response = await fetch(`${API_BASE}/v1/logs?${params.toString()}`);
-        const payload = (await response.json()) as RequestLogsResponse;
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Failed to load request logs");
-        }
+        const targetProjectIds = configuredProjectIds.length > 0 ? configuredProjectIds : [deploymentsProjectId];
+        const responses = await Promise.allSettled(
+          targetProjectIds.map(async (projectId) => {
+            const response = await fetch(`${API_BASE}/v1/logs?${buildLogsParams(projectId).toString()}`);
+            const payload = (await response.json()) as RequestLogsResponse;
+            if (!response.ok) {
+              throw new Error(payload.error ?? `Failed to load request logs for ${projectId}`);
+            }
+            return payload.data ?? [];
+          })
+        );
         if (cancelled) return;
-        setRequestLogs(payload.data ?? []);
+
+        const successful = responses.filter(
+          (result): result is PromiseFulfilledResult<RequestLogEntry[]> => result.status === "fulfilled"
+        );
+        if (successful.length === 0) {
+          const firstError = responses.find((result) => result.status === "rejected");
+          const reason = firstError?.status === "rejected" ? firstError.reason : undefined;
+          if (reason instanceof Error) {
+            throw reason;
+          }
+          throw new Error("Failed to load request logs");
+        }
+
+        const mergedByLogId = new Map<string, RequestLogEntry>();
+        for (const result of successful) {
+          for (const logEntry of result.value) {
+            mergedByLogId.set(logEntry.logId, logEntry);
+          }
+        }
+
+        if (cancelled) return;
+        setRequestLogs(sortRequestLogsByNewest([...mergedByLogId.values()]).slice(0, logLimit));
       } catch (error: unknown) {
         if (cancelled) return;
         setLogsError(normalizeFetchError(error));
@@ -1462,6 +1511,7 @@ export default function App() {
       cancelled = true;
     };
   }, [
+    configuredProjectIds.join("|"),
     deploymentsProjectId,
     isLogsView,
     isProjectScopedLogs,
