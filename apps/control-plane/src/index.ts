@@ -1205,7 +1205,27 @@ function parseTrackerEntries(raw: string, expectedProjectSlug: string, expectedP
     }
   }
 
-  return parsed.reverse();
+  // Tracker writes multi-phase entries (e.g., Pulling -> Ready/Failed) with the same deploymentId.
+  // Keep only the newest status per deploymentId so history doesn't show stale Pulling rows.
+  const newestFirst = parsed.reverse();
+  const seenDeploymentIds = new Set<string>();
+  const deduped: Deployment[] = [];
+
+  for (const deployment of newestFirst) {
+    if (seenDeploymentIds.has(deployment.deploymentId)) {
+      continue;
+    }
+    seenDeploymentIds.add(deployment.deploymentId);
+    deduped.push(deployment);
+  }
+
+  // Keep Pulling only for the newest row (active run). Older Pulling rows are stale history noise.
+  return deduped.filter((deployment, index) => {
+    if (index === 0) {
+      return true;
+    }
+    return deployment.status.trim().toLowerCase() !== "pulling";
+  });
 }
 
 async function readLocalTracker(expectedProjectSlug: string, limit: number): Promise<Deployment[]> {
